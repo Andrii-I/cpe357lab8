@@ -22,6 +22,8 @@ typedef struct mypipe
     int end_occupied;
 }mypipe;
 
+int empty = 1;
+
 int min(int x, int y) 
 { 
     return y ^ ((x ^ y) & -(x < y)); 
@@ -33,7 +35,7 @@ void init_pipe(mypipe* pipe, int size)
     byte* t = (byte*)malloc(size);
     pipe->pipebuffer = t;
     pipe->buffersize = size;
-    pipe->start_occupied = pipe->end_occupied = 0;
+    pipe->start_occupied = pipe->end_occupied = -1;
 
     return;
 }
@@ -42,85 +44,92 @@ void init_pipe(mypipe* pipe, int size)
 int mywrite(mypipe* pipe, byte* buffer, int size)
 {
     //It returns how many bytes you have written into the pipe. That sounds redundant, but it could be less than the actual size if the pipe is smaller.     
-    if (size > pipe->buffersize || size <= 0)
+    int move_start = 0;
+
+    if (pipe->start_occupied == -1 && pipe->end_occupied == -1 && size > 0)
     {
-        return 0;
-    }
-    else
+        empty = 0;
+        move_start = 1;
+    }  
+
+
+    int j = 0;
+    for (; j < size; j++)
     {
-        int occupied;
-        if (pipe->start_occupied == pipe->end_occupied)
+        if (pipe->end_occupied + 1 == pipe->start_occupied)
         {
-            occupied = 0;
-        }
-        else if (pipe->start_occupied < pipe->end_occupied)
+            break;
+        }        
+        else if (pipe->end_occupied + 1 == pipe->buffersize)
         {
-            occupied = pipe->end_occupied - pipe->start_occupied + 1;
-        }
-        else
-        {
-            occupied = pipe->buffersize - pipe->start_occupied + pipe->end_occupied;
-        }
-        
-
-        int i; 
-        if ( occupied == 0)
-        {
-            i = 0;
-            pipe->start_occupied = i;
-        }
-        else if (occupied + size > pipe->buffersize) 
-        {
-            i = pipe->start_occupied = pipe->end_occupied + 1;
-        }
-        else 
-        {
-            i = pipe->end_occupied + 1;
-        }
-
-        
-
-        for (int j = 0; j < size; j++)
-        {
-            pipe->pipebuffer[i] = buffer[j];
-            pipe->end_occupied = i;
-            i++;
-            if (i == pipe->buffersize)
+            if (pipe->start_occupied > 0)
             {
-                i = 0;
+                pipe->end_occupied = -1;
+            }
+            else if (pipe->start_occupied == 0)
+            {
+                break;
+            }
+            else
+            {
+                printf("ERROR ERROR\n");
             }
         }
 
-        return size;
+        if (empty == 0)
+        {
+            pipe->end_occupied++;
+        }
+        
+        //pipe->end_occupied++;
+        pipe->pipebuffer[pipe->end_occupied] = buffer[j];
+        empty = 0;
     }
+
+    if (move_start)
+    {
+        pipe->start_occupied = 0;
+    }
+    
+    return j;
 }
 
 //reads "size" bytes from pipe into buffer, returns how much it read (max size), 0 if pipe is empty
 int myread(mypipe* pipe, byte* buffer, int size)
 {
     //In normal pipes, lets say you have "hello", 6 bytes, but you read 60. read still returns 6, because there was not more in the pipe
-    
-    int to_read;
-
-    if (pipe->start_occupied == pipe->end_occupied) return 0;
-    else if (pipe->end_occupied > pipe->start_occupied)
+    if (pipe->start_occupied == -1 && pipe->end_occupied == -1)
     {
-        to_read = min(size, pipe->end_occupied - pipe->start_occupied + 1);      
-    }
-    else
+        return 0;
+    }  
+
+
+    int j = 0;
+    for (; j < size; j++)
     {
-        to_read = min(size, pipe->buffersize - pipe->start_occupied + pipe->end_occupied);
+/*         else if (pipe->start_occupied + 1 > pipe->end_occupied)
+        {
+            break;
+        }  */
+
+        buffer[j] = pipe->pipebuffer[pipe->start_occupied];
+
+        if (pipe->start_occupied + 1 == pipe->buffersize)
+        {
+            pipe->start_occupied = -1;
+        } 
+
+        if (pipe->start_occupied == pipe->end_occupied)
+        {
+            empty = 1;
+            break;
+        } 
+
+
+        pipe->start_occupied++;
     }
 
-    int i = pipe->start_occupied;
-    for (int j = 0; j < to_read; j++)
-    {
-        buffer[j] = pipe->pipebuffer[i];
-        i++;
-    }
-
-    return to_read;
-
+    return j;
 }
 
 void main()
@@ -129,37 +138,14 @@ void main()
 
     char text[100];
     mypipe pipeA;
-    
     init_pipe(&pipeA, 32);
     mywrite(&pipeA, "hello world", 12);
-
-     for (int i = 0; i < 32; i++)
-    {
-        printf("%c\n", pipeA.pipebuffer[i]);
-    }
-
-    printf("**********************\n"); 
-
-
     mywrite(&pipeA, "it's a nice day", 16);
-
-    for (int i = 0; i < 32; i++)
-    {
-        printf("%c\n", pipeA.pipebuffer[i]);
-    } 
-
     myread(&pipeA, text, 12);
-    printf("1: %s\n", text);
-    
+    printf("%s\n", text);
     myread(&pipeA, text, 16);
-    printf("2: %s\n", text);
-    
+    printf("%s\n", text);
     mywrite(&pipeA, "and now we test the carryover", 30);
-    myread(&pipeA, text, 16);
-    printf("3: %s\n", text);
-
-    for (int i = 0; i < 32; i++)
-    {
-        printf("%c\n", pipeA.pipebuffer[i]);
-    } 
+    myread(&pipeA, text, 30);
+    printf("%s\n", text);
 }
